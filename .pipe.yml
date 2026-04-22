@@ -1,0 +1,15 @@
+# .pipe.yml - Project's pipeline
+
+name: vite-plugin-librejs
+image: docker.io/denoland/deno:debian-2.7.12
+
+steps:
+    - name: Lint
+      parallel: true
+      run: |
+          deno lint
+
+    - name: Check
+      parallel: true
+      run: |
+          deno check
