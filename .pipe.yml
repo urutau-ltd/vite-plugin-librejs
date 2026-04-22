@@ -10,9 +10,9 @@ steps:
     - name: Lint
       parallel: true
       run: |
-          deno lint
+          /usr/bin/deno lint
 
     - name: Check
       parallel: true
       run: |
-          deno check
+          /usr/bin/deno check
