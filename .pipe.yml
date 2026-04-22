@@ -4,7 +4,7 @@ name: vite-plugin-librejs
 image: docker.io/denoland/deno:debian-2.7.12
 
 env:
-    PATH: /usr/bin/deno:/usr/local/sbin:/usr/local/bin:/usr/sbin/:/sbin/:bin
+    PATH: /usr/bin/deno:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin/:/sbin/:bin
 
 steps:
     - name: Lint
