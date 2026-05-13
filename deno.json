@@ -1,10 +1,13 @@
 {
     "name": "@urutau-ltd/vite-plugin-librejs",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "license": "AGPL-3.0-or-later",
     "exports": "./mod.ts",
     "tasks": {
-        "dev": "deno run --watch main.ts"
+        "check": "deno check mod.ts",
+        "fmt": "deno fmt --check",
+        "lint": "deno lint",
+        "test": "deno test"
     },
     "fmt": {
         "useTabs": false,

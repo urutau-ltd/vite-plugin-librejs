@@ -10,9 +10,14 @@ steps:
     - name: Lint
       parallel: true
       run: |
-          /usr/bin/deno lint
+          deno lint
 
     - name: Check
       parallel: true
       run: |
-          /usr/bin/deno check
+          deno check mod.ts
+
+    - name: Test
+      parallel: true
+      run: |
+          deno test

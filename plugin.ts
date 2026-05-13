@@ -21,7 +21,11 @@
  *    discover the web labels page automatically.
  */
 
-import type { HtmlTagDescriptor, Plugin } from "vite";
+import type {
+    HtmlTagDescriptor,
+    IndexHtmlTransformContext,
+    Plugin,
+} from "vite";
 // In Vite ≥7 the bundler backend switched from Rollup to Rolldown.
 // These types live in rolldown; Vite re-exports a subset but not all of
 // them in every version.  Importing directly from "rolldown" is safe for
@@ -125,8 +129,9 @@ export interface LibreJSOptions {
     readonly licensePageTitle?: string;
 
     /**
-     * Per-chunk overrides keyed by Vite's `chunk.fileName`
-     * (e.g. `"assets/vendor-Bca12345.js"`).
+     * Per-chunk overrides keyed by either Vite's final `chunk.fileName`
+     * (e.g. `"assets/vendor-Bca12345.js"`) or the logical `chunk.name`
+     * (e.g. `"vendor"`).
      */
     readonly chunks?: Readonly<Record<string, ChunkLicense>>;
 }
@@ -143,7 +148,39 @@ interface ResolvedChunk {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const isJsChunk = (fileName: string): boolean => fileName.endsWith(".js");
+const JS_CHUNK_PATTERN = /\.(?:[cm]?js)$/;
+
+const isJsChunk = (fileName: string): boolean =>
+    JS_CHUNK_PATTERN.test(fileName);
+
+const normalizeOutputPath = (path: string): string =>
+    path.replace(/^\.?\//, "").replace(/^\/+/, "");
+
+const dirname = (path: string): string => {
+    const normalized = normalizeOutputPath(path);
+    const separatorIndex = normalized.lastIndexOf("/");
+    return separatorIndex === -1 ? "" : normalized.slice(0, separatorIndex);
+};
+
+const relativePath = (fromFile: string, toFile: string): string => {
+    const fromParts = dirname(fromFile).split("/").filter(Boolean);
+    const toParts = normalizeOutputPath(toFile).split("/").filter(Boolean);
+
+    while (fromParts[0] !== undefined && fromParts[0] === toParts[0]) {
+        fromParts.shift();
+        toParts.shift();
+    }
+
+    const upwardPath = "../".repeat(fromParts.length);
+    return `${upwardPath}${toParts.join("/")}` || ".";
+};
+
+const getChunkOverride = (
+    chunkOverrides: Readonly<Record<string, ChunkLicense>>,
+    fileName: string,
+    chunkName: string,
+): ChunkLicense | undefined =>
+    chunkOverrides[fileName] ?? chunkOverrides[chunkName];
 
 const autoSourceUrl = (base: string, chunkName: string): string =>
     `${base.replace(/\/$/, "")}/${chunkName}.js`;
@@ -192,11 +229,20 @@ export const librejsPlugin = (options: LibreJSOptions): Plugin => {
         fileName: string,
         chunkName: string,
     ): ResolvedChunk => {
-        const override: ChunkLicense | undefined = chunkOverrides[fileName];
+        const override = getChunkOverride(chunkOverrides, fileName, chunkName);
         const spdxId: string = override?.license ?? globalLicense;
         const info: LicenseInfo | undefined = getLicense(spdxId);
-        const magnet: string = override?.magnet ?? info?.magnet ??
-            defaultMagnet;
+        const magnet = override?.magnet ?? info?.magnet ??
+            (spdxId === globalLicense ? defaultMagnet : undefined);
+
+        if (magnet === undefined) {
+            throw new Error(
+                `[vite-plugin-librejs] Chunk "${fileName}" declares unsupported license "${spdxId}".\n` +
+                    `Supply "chunks.${fileName}.magnet" (or "chunks.${chunkName}.magnet") to define the LibreJS magnet URI.\n` +
+                    `Reference: https://www.gnu.org/software/librejs/manual/html_node/Free-Licenses-Detection.html`,
+            );
+        }
+
         const label: string = info?.label ?? spdxId;
         const licenseUrl: string = info?.url ?? magnet;
         const source: string | undefined = override?.source ??
@@ -209,7 +255,7 @@ export const librejsPlugin = (options: LibreJSOptions): Plugin => {
 
     // ── Plugin object ─────────────────────────────────────────────────────────
     return {
-        name: "librejs",
+        name: "vite-plugin-librejs",
         enforce: "post",
 
         // 1. Wrap every JS chunk with @license / @license-end ─────────────────
@@ -262,7 +308,7 @@ export const librejsPlugin = (options: LibreJSOptions): Plugin => {
                     );
                     return [
                         Object.freeze<WeblabelEntry>({
-                            scriptPath: `/${fileName}`,
+                            scriptPath: relativePath(weblabelsPath, fileName),
                             scriptName: fileName.split("/").at(-1) ?? fileName,
                             licenseLabel: label,
                             licenseUrl,
@@ -271,7 +317,10 @@ export const librejsPlugin = (options: LibreJSOptions): Plugin => {
                                 : {}),
                         }),
                     ];
-                });
+                })
+                .toSorted((left, right) =>
+                    left.scriptName.localeCompare(right.scriptName)
+                );
 
             if (entries.length === 0) return;
 
@@ -283,14 +332,17 @@ export const librejsPlugin = (options: LibreJSOptions): Plugin => {
         },
 
         // 3. Inject rel="jslicense" link into every HTML page ─────────────────
-        transformIndexHtml(): HtmlTagDescriptor[] {
+        transformIndexHtml(
+            _html: string,
+            context: IndexHtmlTransformContext,
+        ): HtmlTagDescriptor[] {
             if (!injectLicenseLink) return [];
 
             return [
                 {
                     tag: "a",
                     attrs: {
-                        href: `/${weblabelsPath}`,
+                        href: relativePath(context.path, weblabelsPath),
                         rel: "jslicense",
                         style: "font-size:0.8em;opacity:0.7",
                     },
