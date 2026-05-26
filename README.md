@@ -164,6 +164,11 @@ import { librejsPlugin } from "jsr:@urutau-ltd/vite-plugin-librejs";
 export default defineConfig({
     build: {
         sourcemap: false,
+        output: {
+            // Vite 8 / Rolldown requires a function
+            manualChunks: (id) =>
+                id.includes("node_modules") ? "vendor" : "undefined",
+        },
     },
     plugins: [
         librejsPlugin({

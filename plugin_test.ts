@@ -2,14 +2,6 @@
 import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
 import { librejsPlugin } from "./plugin.ts";
 
-type RenderChunkHook = (
-    this: unknown,
-    code: string,
-    chunk: { fileName: string; name: string },
-    outputOptions: unknown,
-    meta: unknown,
-) => { code: string } | null;
-
 type GenerateBundleHook = (
     this: { emitFile: (file: { fileName: string; source: string }) => string },
     outputOptions: unknown,
@@ -36,31 +28,72 @@ const asHook = <T>(hook: T | { handler: T } | undefined): T => {
     throw new Error("Expected plugin hook to be defined.");
 };
 
-Deno.test("renderChunk injects LibreJS comments for JS-family chunks", () => {
+// Helper: run generateBundle and return mutated chunk codes.
+const runGenerateBundle = (
+    plugin: ReturnType<typeof librejsPlugin>,
+    bundle: Record<string, { type: string; name?: string; code?: string }>,
+): Record<string, string> => {
+    const generateBundle = asHook(
+        plugin.generateBundle,
+    ) as unknown as GenerateBundleHook;
+
+    generateBundle.call(
+        { emitFile: () => "" },
+        {},
+        bundle,
+        true,
+    );
+
+    return Object.fromEntries(
+        Object.entries(bundle)
+            .filter(([, v]) => v.type === "chunk")
+            .map(([k, v]) => [k, v.code ?? ""]),
+    );
+};
+
+Deno.test("generateBundle injects LibreJS comments for JS-family chunks", () => {
     const plugin = librejsPlugin({
         license: "MIT",
         sourceBase: "https://example.com/source/",
     });
-    const renderChunk = asHook(plugin.renderChunk) as RenderChunkHook;
 
-    const result = renderChunk.call(
-        {},
-        "console.log('ok');",
-        {
-            fileName: "assets/app.mjs",
+    const result = runGenerateBundle(plugin, {
+        "assets/app.mjs": {
+            type: "chunk",
             name: "app",
+            code: "console.log('ok');",
         },
-        {},
-        {},
-    );
+    });
 
-    assertStringIncludes(result?.code ?? "", "// @license ");
-    assertStringIncludes(result?.code ?? "", " MIT");
+    const code = result["assets/app.mjs"] ?? "";
+    assertStringIncludes(code, "// @license ");
+    assertStringIncludes(code, " MIT");
     assertStringIncludes(
-        result?.code ?? "",
+        code,
         "// @source https://example.com/source/app.js",
     );
-    assertStringIncludes(result?.code ?? "", "// @license-end");
+    assertStringIncludes(code, "// @license-end");
+});
+
+Deno.test("generateBundle skips non-JS assets", () => {
+    const plugin = librejsPlugin({ license: "MIT" });
+
+    const bundle: Record<
+        string,
+        { type: string; name?: string; code?: string }
+    > = {
+        "assets/style.css": { type: "asset" },
+        "assets/app.js": { type: "chunk", name: "app", code: "var x=1;" },
+    };
+
+    runGenerateBundle(plugin, bundle);
+
+    // CSS asset is untouched (no code property to begin with)
+    assertEquals(
+        (bundle["assets/style.css"] as { code?: string }).code,
+        undefined,
+    );
+    assertStringIncludes(bundle["assets/app.js"].code ?? "", "// @license");
 });
 
 Deno.test("chunk overrides can be keyed by logical chunk name", () => {
@@ -72,20 +105,16 @@ Deno.test("chunk overrides can be keyed by logical chunk name", () => {
             },
         },
     });
-    const renderChunk = asHook(plugin.renderChunk) as RenderChunkHook;
 
-    const result = renderChunk.call(
-        {},
-        "console.log('vendor');",
-        {
-            fileName: "assets/vendor-123.js",
+    const result = runGenerateBundle(plugin, {
+        "assets/vendor-123.js": {
+            type: "chunk",
             name: "vendor",
+            code: "console.log('vendor');",
         },
-        {},
-        {},
-    );
+    });
 
-    assertStringIncludes(result?.code ?? "", "Apache-2.0");
+    assertStringIncludes(result["assets/vendor-123.js"] ?? "", "Apache-2.0");
 });
 
 Deno.test("unsupported per-chunk licenses require an explicit magnet", () => {
@@ -97,19 +126,23 @@ Deno.test("unsupported per-chunk licenses require an explicit magnet", () => {
             },
         },
     });
-    const renderChunk = asHook(plugin.renderChunk) as RenderChunkHook;
+    const generateBundle = asHook(
+        plugin.generateBundle,
+    ) as unknown as GenerateBundleHook;
 
     assertThrows(
         () =>
-            renderChunk.call(
+            generateBundle.call(
+                { emitFile: () => "" },
                 {},
-                "console.log('app');",
                 {
-                    fileName: "assets/app.js",
-                    name: "app",
+                    "assets/app.js": {
+                        type: "chunk",
+                        name: "app",
+                        code: "console.log('app');",
+                    },
                 },
-                {},
-                {},
+                true,
             ),
         Error,
         'Chunk "assets/app.js" declares unsupported license "EUPL-1.2"',
@@ -139,11 +172,13 @@ Deno.test("generateBundle emits sorted relative script links for weblabels", () 
                 type: "chunk",
                 fileName: "assets/z-last.js",
                 name: "z-last",
+                code: "",
             },
             "assets/a-first.js": {
                 type: "chunk",
                 fileName: "assets/a-first.js",
                 name: "a-first",
+                code: "",
             },
             "assets/ignored.css": {
                 type: "asset",
@@ -164,6 +199,16 @@ Deno.test("generateBundle emits sorted relative script links for weblabels", () 
             html.indexOf("../assets/z-last.js"),
         true,
     );
+});
+
+Deno.test("inlineComments: false skips comment injection", () => {
+    const plugin = librejsPlugin({ license: "MIT", inlineComments: false });
+
+    const result = runGenerateBundle(plugin, {
+        "assets/app.js": { type: "chunk", name: "app", code: "var x=1;" },
+    });
+
+    assertEquals(result["assets/app.js"], "var x=1;");
 });
 
 Deno.test("transformIndexHtml injects a relative link to the weblabels page", () => {

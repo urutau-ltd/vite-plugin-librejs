@@ -6,10 +6,12 @@
  *
  * Applies three transforms during `vite build`:
  *
- * 1. **Inline comments** (`renderChunk`, `enforce: "post"`) — wraps every
- *    emitted `.js` chunk with `// @license <magnet> <spdx>` …
- *    `// @license-end` *after* minification, so the comment survives
- *    esbuild/terser without being stripped.
+ * 1. **Inline comments** (`generateBundle`) — wraps every emitted `.js`
+ *    chunk with `// @license <magnet> <spdx>` … `// @license-end` by
+ *    mutating `chunk.code` directly in `generateBundle`, where the code is
+ *    already fully minified.  Using `renderChunk` is insufficient under
+ *    Vite 8 / rolldown because rolldown's minifier runs *after* all
+ *    `renderChunk` hooks and strips any comments they inject.
  *
  * 2. **Web Labels page** (`generateBundle`) — emits an HTML asset at
  *    `weblabelsPath` containing the `jslicense-labels1` table that LibreJS
@@ -35,7 +37,6 @@ import type {
     OutputAsset,
     OutputBundle,
     OutputChunk,
-    RenderedChunk,
 } from "rolldown";
 import { getLicense, type LicenseInfo } from "./licenses.ts";
 import { generateWeblabelsHtml, type WeblabelEntry } from "./weblabels.ts";
@@ -50,18 +51,21 @@ export interface ChunkLicense {
     /**
      * SPDX identifier for this specific chunk.
      * Falls back to the global `license` option when omitted.
+     * @type {string | undefined}
      */
-    readonly license?: string;
+    readonly license?: string | undefined;
     /**
      * Custom LibreJS magnet URI for this chunk.
      * Required only when `license` is not in the built-in map.
+     * @type {string | undefined}
      */
-    readonly magnet?: string;
+    readonly magnet?: string | undefined;
     /**
      * URL to the unminified source of this chunk.
      * Injected as `// @source <url>` and used as the third weblabels column.
+     * @type {string | undefined}
      */
-    readonly source?: string;
+    readonly source?: string | undefined;
 }
 
 /** Configuration for {@link librejsPlugin}. */
@@ -103,8 +107,8 @@ export interface LibreJSOptions {
     /**
      * Inject `// @license` … `// @license-end` comments into every JS chunk.
      *
-     * Uses `renderChunk` with `enforce: "post"` so the comment wraps
-     * the already-minified output.
+     * Comments are injected in `generateBundle` by mutating `chunk.code`
+     * directly, after rolldown's minifier has already run.
      * @default true
      */
     readonly inlineComments?: boolean;
@@ -148,7 +152,7 @@ interface ResolvedChunk {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const JS_CHUNK_PATTERN = /\.(?:[cm]?js)$/;
+const JS_CHUNK_PATTERN: RegExp = /\.(?:[cm]?js)$/;
 
 const isJsChunk = (fileName: string): boolean =>
     JS_CHUNK_PATTERN.test(fileName);
@@ -256,39 +260,35 @@ export const librejsPlugin = (options: LibreJSOptions): Plugin => {
     // ── Plugin object ─────────────────────────────────────────────────────────
     return {
         name: "vite-plugin-librejs",
-        enforce: "post",
 
-        // 1. Wrap every JS chunk with @license / @license-end ─────────────────
-        renderChunk(
-            code: string,
-            chunk: RenderedChunk,
-            _outputOptions: NormalizedOutputOptions,
-        ) {
-            if (!inlineComments || !isJsChunk(chunk.fileName)) {
-                return null;
-            }
-
-            const { spdxId, magnet, source } = resolveChunk(
-                chunk.fileName,
-                chunk.name,
-            );
-            const sourceComment: string = source !== undefined
-                ? `// @source ${source}\n`
-                : "";
-            const header = `// @license ${magnet} ${spdxId}\n${sourceComment}`;
-            const footer = `\n// @license-end\n`;
-
-            return {
-                code: `${header}${code}${footer}`,
-                map: null,
-            };
-        },
-
-        // 2. Emit jslicense-labels1 HTML asset ────────────────────────────────
+        // 1. Inline @license comments + 2. Emit jslicense-labels1 asset
         generateBundle(
             _outputOptions: NormalizedOutputOptions,
             bundle: OutputBundle,
         ): void {
+            // Inject inline comments post-minification.
+            // In vite 8 / rolldown, minification runs after all renderChunk
+            // hooks; mutating chunk.code here reaches the already-final output
+
+            if (inlineComments) {
+                for (const [fileName, asset] of Object.entries(bundle)) {
+                    if (asset.type !== "chunk" || !isJsChunk(fileName)) {
+                        continue;
+                    }
+                    const {
+                        spdxId,
+                        magnet,
+                        source,
+                    } = resolveChunk(fileName, asset.name);
+                    const sourceComment: string = source !== undefined
+                        ? `// @source ${source}\n`
+                        : "";
+                    asset.code =
+                        `// @license ${magnet} ${spdxId}\n${sourceComment}` +
+                        asset.code + `\n// @license-end\n`;
+                }
+            }
+
             if (!weblabels) return;
 
             const entries: ReadonlyArray<WeblabelEntry> = Object.keys(bundle)
@@ -318,7 +318,7 @@ export const librejsPlugin = (options: LibreJSOptions): Plugin => {
                         }),
                     ];
                 })
-                .toSorted((left, right) =>
+                .toSorted((left, right): number =>
                     left.scriptName.localeCompare(right.scriptName)
                 );
 
