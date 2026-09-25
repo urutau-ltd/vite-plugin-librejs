@@ -1,0 +1,18 @@
+{
+    "json.schemaDownload.trustedDomains": {
+        "https://opencode.ai/config.json": true
+    },
+    "deno.enable": true,
+    "editor.defaultFormatter": "denoland.vscode-deno",
+    "editor.formatOnSave": true,
+    "[typescriptreact]": {
+        "editor.defaultFormatter": "denoland.vscode-deno"
+    },
+    "editor.detectIndentation": true,
+    "[css]": {
+        "editor.defaultFormatter": "denoland.vscode-deno"
+    },
+    "[typescript]": {
+        "editor.defaultFormatter": "denoland.vscode-deno"
+    }
+}
