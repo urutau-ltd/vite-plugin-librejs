@@ -161,7 +161,7 @@ Deno.test("generateBundle emits sorted relative script links for weblabels", () 
 
     generateBundle.call(
         {
-            emitFile(file: { fileName: string; source: string }) {
+            emitFile(file: { fileName: string; source: string }): string {
                 emitted.push(file);
                 return "weblabels";
             },

@@ -27,17 +27,8 @@ import type {
     HtmlTagDescriptor,
     IndexHtmlTransformContext,
     Plugin,
+    Rollup,
 } from "vite";
-// In Vite ≥7 the bundler backend switched from Rollup to Rolldown.
-// These types live in rolldown; Vite re-exports a subset but not all of
-// them in every version.  Importing directly from "rolldown" is safe for
-// both Vite 6 (rolldown was already a transitive dep) and Vite 7/8.
-import type {
-    NormalizedOutputOptions,
-    OutputAsset,
-    OutputBundle,
-    OutputChunk,
-} from "rolldown";
 import { getLicense, type LicenseInfo } from "./licenses.ts";
 import { generateWeblabelsHtml, type WeblabelEntry } from "./weblabels.ts";
 
@@ -263,8 +254,8 @@ export const librejsPlugin = (options: LibreJSOptions): Plugin => {
 
         // 1. Inline @license comments + 2. Emit jslicense-labels1 asset
         generateBundle(
-            _outputOptions: NormalizedOutputOptions,
-            bundle: OutputBundle,
+            _outputOptions: Rollup.NormalizedOutputOptions,
+            bundle: Rollup.OutputBundle,
         ): void {
             // Inject inline comments post-minification.
             // In vite 8 / rolldown, minification runs after all renderChunk
@@ -293,8 +284,10 @@ export const librejsPlugin = (options: LibreJSOptions): Plugin => {
 
             const entries: ReadonlyArray<WeblabelEntry> = Object.keys(bundle)
                 .flatMap((fileName): WeblabelEntry[] => {
-                    const asset: OutputAsset | OutputChunk | undefined =
-                        bundle[fileName];
+                    const asset:
+                        | Rollup.OutputAsset
+                        | Rollup.OutputChunk
+                        | undefined = bundle[fileName];
                     if (
                         asset === undefined ||
                         asset.type !== "chunk" ||

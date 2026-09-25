@@ -3,22 +3,70 @@
     "version": "1.0.0",
     "license": "AGPL-3.0-or-later",
     "exports": "./mod.ts",
+    "nodeModulesDir": "auto",
     "tasks": {
-        "check": "deno check mod.ts",
+        "check": "deno check",
         "fmt": "deno fmt --check",
         "lint": "deno lint",
-        "test": "deno test"
+        "test": "deno test -P"
+    },
+    "imports": {
+        "@std/assert": "jsr:@std/assert@^1.0.19",
+        "vite": "npm:vite@^8.0.14"
+    },
+    "publish": {
+        "exclude": [
+            "plugin_test.ts"
+        ]
     },
     "fmt": {
         "useTabs": false,
         "lineWidth": 80,
         "indentWidth": 4,
         "semiColons": true,
-        "proseWrap": "always"
+        "proseWrap": "always",
+        "exclude": [
+            "node_modules"
+        ]
     },
-    "imports": {
-        "@std/assert": "jsr:@std/assert@1.0.19",
-        "rolldown": "npm:rolldown@^1.0.2",
-        "vite": "npm:vite@^8.0.14"
+    "lint": {
+        "rules": {
+            "tags": ["recommended"],
+            "include": [
+                "no-explicit-any",
+                "ban-untagged-todo",
+                "ban-untagged-ignore",
+                "eqeqeq",
+                "explicit-function-return-type",
+                "no-console",
+                "guard-for-in",
+                "no-const-assign",
+                "no-eval",
+                "no-self-compare",
+                "no-throw-literal",
+                "no-undef",
+                "triple-slash-reference",
+                "single-var-declarator",
+                "no-slow-types"
+            ]
+        }
+    },
+    "permissions": {
+        "default": {
+            "read": false,
+            "write": false,
+            "net": false,
+            "env": false,
+            "run": false,
+            "sys": false,
+            "ffi": false,
+            "import": false
+        }
+    },
+    "lock": true,
+    "allowScripts": {
+        "deny": [
+            "npm:*"
+        ]
     }
 }

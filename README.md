@@ -482,9 +482,9 @@ Supported:
 - Vite 8.x
 
 Vite 7 and 8 moved more of their bundler surface toward Rolldown. This plugin
-imports `OutputBundle`, `OutputChunk`, `RenderedChunk` and
-`NormalizedOutputOptions` from `rolldown` directly because those types are not
-consistently re-exported by `vite` across supported versions.
+imports `OutputBundle`, `OutputChunk`, `OutputAsset` and
+`NormalizedOutputOptions` through vite's re-exported `Rollup` type namespace, so
+it only depends on `vite` — rolldown is a transitive dependency of vite itself.
 
 That import is type-level only. It is not there for decoration.
 

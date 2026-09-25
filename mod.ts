@@ -8,7 +8,7 @@
  * ```ts
  * // vite.config.ts
  * import { defineConfig } from "vite";
- * import { librejsPlugin } from "jsr:@tuusuario/vite-plugin-librejs";
+ * import { librejsPlugin } from "jsr:@urutau-ltd/vite-plugin-librejs";
  *
  * export default defineConfig({
  *   plugins: [
