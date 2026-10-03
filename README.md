@@ -654,7 +654,7 @@ This repository now has tests for:
 - a real end-to-end `vite build` that verifies the emitted chunks, the labels
   page, and the injected link in actual build output
 
-The package metadata is set for `1.0.0`, and the repo includes Deno tasks for:
+The package metadata is set for `1.0.3`, and the repo includes Deno tasks for:
 
 - `deno task check`
 - `deno task fmt`
