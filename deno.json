@@ -63,6 +63,15 @@
             "import": false
         }
     },
+    "test": {
+        "permissions": {
+            "read": true,
+            "write": ["/tmp"],
+            "env": true,
+            "sys": true,
+            "ffi": true
+        }
+    },
     "lock": true,
     "allowScripts": {
         "deny": [

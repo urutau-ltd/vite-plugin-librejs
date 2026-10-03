@@ -26,7 +26,7 @@
   (run-deno "check" "--doc"))
 
 (define (test)
-  "Run the plugin unit tests with the minimal permission set."
+  "Run tests with the minimal permission set declared in deno.json."
   (run-deno "test" "-P"))
 
 (define (ci)
