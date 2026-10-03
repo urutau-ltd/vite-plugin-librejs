@@ -43,8 +43,8 @@ export default defineConfig({
 ```
 
 If you are using this from a Deno-managed project, the import above is enough.
-If you are using a regular Vite project, the important bit is still the same:
-the plugin itself comes from JSR and Vite comes from `npm:vite`.
+For a regular Vite project the import is the same: the plugin comes from JSR,
+Vite comes from `npm:vite`.
 
 ## Quick Start
 
@@ -129,8 +129,8 @@ LibreJS falls back to this table when a script has no inline comment, or when
 something in front of your app strips or rewrites comments.
 
 One behavior detail that matters: script links in the generated table are
-relative to the web labels page itself. This means nested output layouts work
-correctly instead of assuming everything lives at web root.
+relative to the web labels page itself. So nested output layouts work without
+assuming everything lives at web root.
 
 ### License Link Injection
 
@@ -149,8 +149,8 @@ Appends to the `<body>` of every HTML page:
 The `rel="jslicense"` attribute is how LibreJS discovers the web labels page for
 a given site.
 
-The injected `href` is also relative to each HTML file, which matters if your
-build emits pages into nested directories.
+The injected `href` follows the same relative-link rule as the labels page, so
+nested output directories work.
 
 ## A Complete Example
 
@@ -283,8 +283,8 @@ Examples:
 - `legal/javascript.html`
 - `javascript.html`
 
-The plugin computes relative links against this path, so moving it deeper into
-the output tree is supported.
+The plugin computes relative links against this path, so you can move it deeper
+into the output tree.
 
 ### `inlineComments`
 
@@ -417,12 +417,12 @@ This means:
 
 During `vite build`, the plugin hooks into:
 
-- `renderChunk`
 - `generateBundle`
 - `transformIndexHtml`
 
-It is a build-time plugin. It is not doing anything interesting during dev
-server operation, and that is intentional.
+It is a build-time plugin. In dev, `transformIndexHtml` still runs, so served
+pages get the license link but no comments and no labels page. That is
+intentional.
 
 The plugin name reported to Vite is:
 
@@ -430,8 +430,8 @@ The plugin name reported to Vite is:
 vite-plugin-librejs
 ```
 
-The plugin uses `enforce: "post"` so comment injection happens after minifiers
-have already done their thing.
+Comment injection happens inside `generateBundle`, after minifiers have already
+done their thing.
 
 ## Supported Licenses
 
@@ -597,6 +597,7 @@ there. Relative links are the correct default for emitted static artifacts.
 ```txt
 [vite-plugin-librejs] License "X" is not in the built-in map.
 Supply a "magnet" URI in the plugin options.
+Reference: https://www.gnu.org/software/librejs/manual/html_node/Free-Licenses-Detection.html
 ```
 
 Your global `license` is unknown to the built-in map. Provide `magnet`.
