@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
+import {
+    assert,
+    assertEquals,
+    assertStringIncludes,
+    assertThrows,
+} from "@std/assert";
+import { getLicense } from "./licenses.ts";
 import { librejsPlugin } from "./plugin.ts";
+import { generateWeblabelsHtml } from "./weblabels.ts";
 
 type GenerateBundleHook = (
     this: { emitFile: (file: { fileName: string; source: string }) => string },
@@ -231,4 +238,235 @@ Deno.test("transformIndexHtml injects a relative link to the weblabels page", ()
 
     assertEquals(tags[0]?.attrs?.href, "../about/javascript.html");
     assertEquals(tags[0]?.attrs?.rel, "jslicense");
+});
+
+Deno.test("chunk overrides keyed by final fileName win over chunk.name", () => {
+    const plugin = librejsPlugin({
+        license: "MIT",
+        chunks: {
+            vendor: { license: "Apache-2.0" },
+            "assets/vendor-123.js": { license: "ISC" },
+        },
+    });
+
+    const result = runGenerateBundle(plugin, {
+        "assets/vendor-123.js": {
+            type: "chunk",
+            name: "vendor",
+            code: "console.log('vendor');",
+        },
+    });
+
+    assertStringIncludes(result["assets/vendor-123.js"] ?? "", " ISC");
+});
+
+Deno.test("custom global magnet is used for licenses outside the built-in map", () => {
+    const plugin = librejsPlugin({
+        license: "EUPL-1.2",
+        magnet:
+            "magnet:?xt=urn:btih:e4ae48d8b484fce88a6cf1d33d4a4bfcbc1fdcf1&dn=eupl-1.2.txt",
+    });
+
+    const result = runGenerateBundle(plugin, {
+        "assets/app.js": { type: "chunk", name: "app", code: "x();" },
+    });
+
+    const code = result["assets/app.js"] ?? "";
+    assertStringIncludes(code, "EUPL-1.2");
+    assertStringIncludes(code, "e4ae48d8b484fce88a6cf1d33d4a4bfcbc1fdcf1");
+});
+
+Deno.test("unknown global license without magnet throws at plugin creation", () => {
+    assertThrows(
+        () => librejsPlugin({ license: "EUPL-1.2" }),
+        Error,
+        'License "EUPL-1.2" is not in the built-in map',
+    );
+});
+
+Deno.test("per-chunk source override beats sourceBase", () => {
+    const plugin = librejsPlugin({
+        license: "MIT",
+        sourceBase: "https://example.com/src/",
+        chunks: {
+            vendor: {
+                source:
+                    "https://registry.npmjs.org/some-dep/-/some-dep-1.0.0.tgz",
+            },
+        },
+    });
+
+    const result = runGenerateBundle(plugin, {
+        "assets/vendor.js": { type: "chunk", name: "vendor", code: "x();" },
+        "assets/app.js": { type: "chunk", name: "app", code: "y();" },
+    });
+
+    assertStringIncludes(
+        result["assets/vendor.js"] ?? "",
+        "registry.npmjs.org",
+    );
+    assertStringIncludes(
+        result["assets/app.js"] ?? "",
+        "// @source https://example.com/src/app.js",
+    );
+});
+
+Deno.test("generateBundle wraps .cjs chunks too", () => {
+    const plugin = librejsPlugin({ license: "MIT" });
+
+    const result = runGenerateBundle(plugin, {
+        "assets/app.cjs": { type: "chunk", name: "app", code: "x();" },
+    });
+
+    assertStringIncludes(result["assets/app.cjs"] ?? "", "// @license ");
+    assertStringIncludes(result["assets/app.cjs"] ?? "", "// @license-end");
+});
+
+Deno.test("injectLicenseLink: false skips link injection", () => {
+    const plugin = librejsPlugin({
+        license: "MIT",
+        injectLicenseLink: false,
+    });
+    const transformIndexHtml = asHook(
+        plugin.transformIndexHtml,
+    ) as unknown as TransformIndexHtmlHook;
+
+    const tags = transformIndexHtml.call(
+        {},
+        "<html></html>",
+        { path: "index.html", filename: "/virtual/dist/index.html" },
+    );
+
+    assertEquals(tags.length, 0);
+});
+
+Deno.test("weblabels: false emits no labels page", () => {
+    const plugin = librejsPlugin({ license: "MIT", weblabels: false });
+    let emitted = false;
+    const generateBundle = asHook(
+        plugin.generateBundle,
+    ) as unknown as GenerateBundleHook;
+
+    generateBundle.call(
+        {
+            emitFile(): string {
+                emitted = true;
+                return "";
+            },
+        },
+        {},
+        { "assets/app.js": { type: "chunk", name: "app", code: "x();" } },
+        true,
+    );
+
+    assertEquals(emitted, false);
+});
+
+Deno.test("licensePageTitle appears in the generated labels page", () => {
+    const plugin = librejsPlugin({
+        license: "MIT",
+        licensePageTitle: "LibreJS metadata",
+    });
+    const emitted: Array<{ source: string }> = [];
+    const generateBundle = asHook(
+        plugin.generateBundle,
+    ) as unknown as GenerateBundleHook;
+
+    generateBundle.call(
+        {
+            emitFile(file: { fileName: string; source: string }): string {
+                emitted.push(file);
+                return "weblabels";
+            },
+        },
+        {},
+        { "assets/app.js": { type: "chunk", name: "app", code: "x();" } },
+        true,
+    );
+
+    assertStringIncludes(
+        emitted[0]?.source ?? "",
+        "<title>LibreJS metadata</title>",
+    );
+    assertStringIncludes(emitted[0]?.source ?? "", "<h1>LibreJS metadata</h1>");
+});
+
+Deno.test("getLicense resolves built-in licenses and undefined otherwise", () => {
+    assertEquals(getLicense("MIT")?.label, "Expat (MIT) License");
+    assertEquals(getLicense("EUPL-1.2"), undefined);
+});
+
+Deno.test("generateWeblabelsHtml produces a complete standalone document", () => {
+    const html = generateWeblabelsHtml([
+        {
+            scriptPath: "/assets/app.js",
+            scriptName: "app.js",
+            licenseLabel: "Expat (MIT) License",
+            licenseUrl: "https://spdx.org/licenses/MIT.html",
+            sourcePath: "https://example.com/src/app.js",
+        },
+    ]);
+
+    assertStringIncludes(html, "<!DOCTYPE html>");
+    assertStringIncludes(html, 'id="jslicense-labels1"');
+    assertStringIncludes(html, "Expat (MIT) License");
+    assertStringIncludes(html, "https://example.com/src/app.js");
+    assertStringIncludes(html, "<h1>JavaScript License Information</h1>");
+});
+
+Deno.test("real vite build emits LibreJS-compliant output", async () => {
+    const root = await Deno.makeTempDir({ prefix: "librejs-vite-e2e-" });
+    try {
+        await Deno.writeTextFile(
+            `${root}/index.html`,
+            `<!doctype html><html><head></head><body><script type="module" src="/src/main.js"></script></body></html>`,
+        );
+        await Deno.mkdir(`${root}/src`);
+        await Deno.writeTextFile(
+            `${root}/src/main.js`,
+            `export const msg = "hello librejs";\nconsole.log(msg);\n`,
+        );
+
+        const { build } = await import("vite");
+        await build({
+            root,
+            configFile: false,
+            logLevel: "silent",
+            plugins: [
+                librejsPlugin({
+                    license: "AGPL-3.0-or-later",
+                    sourceBase: "https://example.com/src/",
+                }),
+            ],
+        });
+
+        const dist = `${root}/dist`;
+        const jsFile = [...Deno.readDirSync(`${dist}/assets`)]
+            .map((entry) => entry.name)
+            .find((name) => name.endsWith(".js"));
+        assert(jsFile !== undefined, "expected a built JS chunk");
+
+        const code = await Deno.readTextFile(`${dist}/assets/${jsFile}`);
+        assertStringIncludes(
+            code,
+            "// @license magnet:?xt=urn:btih:0b31508aeb0634b347b8270c7bee4d411b5d4109&dn=agpl-3.0.txt AGPL-3.0-or-later",
+        );
+        assertStringIncludes(
+            code,
+            "// @source https://example.com/src/index.js",
+        );
+        assertStringIncludes(code, "// @license-end");
+
+        const labels = await Deno.readTextFile(
+            `${dist}/about/javascript.html`,
+        );
+        assertStringIncludes(labels, 'id="jslicense-labels1"');
+        assertStringIncludes(labels, `href="../assets/${jsFile}"`);
+
+        const html = await Deno.readTextFile(`${dist}/index.html`);
+        assertStringIncludes(html, 'rel="jslicense"');
+        assertStringIncludes(html, 'href="about/javascript.html"');
+    } finally {
+        await Deno.remove(root, { recursive: true });
+    }
 });

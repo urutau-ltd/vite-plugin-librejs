@@ -637,10 +637,15 @@ work when pages are not served from root.
 This repository now has tests for:
 
 - inline comment injection
-- chunk-name overrides
-- unsupported per-chunk license failures
+- chunk-name and final-fileName overrides
+- unsupported license failures, both global and per-chunk
 - relative web labels links
 - relative HTML link injection
+- option toggles (`inlineComments`, `weblabels`, `injectLicenseLink`)
+- custom magnets and per-chunk sources
+- the standalone `generateWeblabelsHtml` API
+- a real end-to-end `vite build` that verifies the emitted chunks, the labels
+  page, and the injected link in actual build output
 
 The package metadata is set for `1.0.0`, and the repo includes Deno tasks for:
 
