@@ -632,6 +632,13 @@ Check:
 That is intentional. The plugin now emits relative links so the generated files
 work when pages are not served from root.
 
+## Examples
+
+A stock [Fresh 2](https://usefresh.dev/) project wired up with this plugin lives
+in `examples/fresh`. Fresh builds with Vite through `@fresh/plugin-vite`, so the
+plugin slots in next to it in `vite.config.ts`. Fresh is MIT-licensed; the
+example's README explains what carries over and what does not.
+
 ## Testing and Release Notes
 
 This repository now has tests for:

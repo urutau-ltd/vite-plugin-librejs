@@ -16,7 +16,8 @@
     },
     "publish": {
         "exclude": [
-            "plugin_test.ts"
+            "plugin_test.ts",
+            "examples"
         ]
     },
     "fmt": {
@@ -72,6 +73,9 @@
             "ffi": true
         }
     },
+    "exclude": [
+        "examples"
+    ],
     "lock": true,
     "allowScripts": {
         "deny": [

@@ -29,6 +29,10 @@
   "Run tests with the minimal permission set declared in deno.json."
   (run-deno "test" "-P"))
 
+(define (fresh)
+  "Install deps and build the stock Fresh example app."
+  ($ '("sh" "-c" "cd examples/fresh && deno install && deno task build")))
+
 (define (ci)
   "Full pipeline with coverage."
   (fmt-check)
